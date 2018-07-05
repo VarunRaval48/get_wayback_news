@@ -186,6 +186,16 @@ def get_page(url, snap, addr, access_info):
           return None
 
         addr = get_page_addr(r_url, access_info.domain_name)
+        if addr is None:
+          print('response url is invalid: {}'.format(r_url))
+          return None
+
+        u_addr = get_unique_addr(snap, addr)
+
+        if u_addr in seen_pages:
+          print('response url is already seen: {}'.format(r_url))
+
+        seen_pages.add(u_addr)
 
       try:
         page = response.read().decode('utf-8', 'ignore')
@@ -403,8 +413,10 @@ def signal_handler(signal, frame):
   sys.exit(0)
 
 
+# snap: yyyymmdd
+# addr: path of page
 def get_unique_addr(snap, addr):
-  return snap + '_' + addr
+  return '{}_{}'.format(snap, addr)
 
 
 signal.signal(signal.SIGINT, signal_handler)
