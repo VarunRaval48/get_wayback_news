@@ -15,6 +15,13 @@ MAX_DEPTH_FROM_HOME = 2
 MAX_TRIES = 5
 
 seen_pages = set()
+
+# saved pages is needed because different url may be pointing to same page
+# because of different snapshots
+# pages are remembered using publication date
+saved_pages = set()
+
+# format of queue is (url, snapshot (string), page_address, depth)
 url_queue = deque()
 
 
@@ -128,8 +135,16 @@ def get_home_page_urls(access_info):
   return id_dict
 
 
-# Returns: page, snap if obtained else None, None
-def get_page(url):
+def get_page(url, snap, addr, access_info):
+  """
+  url: entire url of the page from wayback
+  snap: (string) snapshot number yyyymmdd
+  addr: address of the page in nytimes.com
+  access_info:
+
+  Returns: r_url, snap, addr, page if obtained else None
+  """
+
   tries = 0
   code = None
   while (tries < MAX_TRIES):
@@ -137,53 +152,76 @@ def get_page(url):
       response = urlopen(url)
     except error.HTTPError as h:
       print('url: {} got HttpError, error: {}'.format(url, h))
-      return None, None
+      return None
     except error.URLError as u:
       print('url: {} got URLError, error: {}'.format(url, u))
-      return None, None
+      return None
     except Exception as e:
       print('url: {} got error, error: {}'.format(e))
-      return None, None
+      return None
 
     if (response.getcode() == 200):
       r_url = response.geturl()
 
-      # check whether response url is pointing to a valid page
-      # one way is to check for yyyymmddhhmmss/ format in url
-      r_snap = get_snapshot_number(r_url)
+      if url != r_url:
+        # check whether response url is pointing to a valid page
+        # one way is to check for yyyymmddhhmmss/ format in url
+        r_snap = get_snapshot_number(r_url)
 
-      # url will always have snap because url is added only if it has snap
-      # look at traverse_page and when queue is loaded first time
-      snap = get_snapshot_number(url)
-      if r_snap is None or r_snap != snap:
-        print('response url is different {}'.format(r_url))
-        print('snap:', snap, 'r_snap', r_snap)
-        return None, None
+        # url will always have snap because url is added only if it has snap
+        # (look at function traverse_page and when queue is loaded first time)
+
+        if r_snap is None:
+          print('response url is different {}'.format(r_url))
+          print('snap:', snap, 'r_snap', r_snap)
+          return None
+
+        snap = r_snap[:8]
+        snap_date = int(snap)
+        # check whether redirected url's snapshot is before start date or after
+        # only see if its after start date
+        # TODO see if it has to be after cur snap
+        if snap_date < access_info.start_date:
+          print("response url's snap is out of range {}".format(r_url))
+          return None
+
+        addr = get_page_addr(r_url, access_info.domain_name)
 
       try:
         page = response.read().decode('utf-8', 'ignore')
-        return page, snap
+        return r_url, snap, addr, page
       except UnicodeDecodeError as e:
         print('error decoding page at url: {}, error: {}'.format(url, e))
         input()
-        return None, None
+        return None
       except Exception as e:
         print('error: {}'.format(e))
-        return None, None
+        return None
 
     code = response.getcode()
     tries += 1
 
   # log here about url and response
   print("{}: response code: {}".format(url, code))
-  return None, None
+  return None
 
 
-# Returns: None
-def traverse_page(url, u_addr, access_info, depth=None):
-  page, snap = get_page(url)
-  if page is None:
+def traverse_page(url, snap, orig_addr, access_info, depth=None):
+  """
+  url: entire url of the page from wayback
+  snap: (string) snapshot number yyyymmdd
+  orig_addr: address of the page in nytimes.com
+  access_info:
+  depth:
+
+  Returns: None
+  """
+  # url received from get_page may be different if page is redirected
+  ret = get_page(url, snap, orig_addr, access_info)
+  if ret is None:
     return
+
+  url, snap, r_addr, page = ret
 
   is_proper_page, is_article, pub_date = access_info.get_page_info(page, url)
   print('page {} is_proper_page: {}, is_article: {}, pub_date: {}'.format(
@@ -200,7 +238,10 @@ def traverse_page(url, u_addr, access_info, depth=None):
     if pub_date < access_info.start_date or pub_date > access_info.end_date:
       return
 
-    access_info.save_article(page, u_addr, pub_date)
+    article_name = '{}_{}'.format(pub_date, r_addr)
+    if article_name not in saved_pages:
+      saved_pages.add(article_name)
+      access_info.save_article(page, str(pub_date), r_addr, article_name)
 
   if depth is None:
     depth = MAX_DEPTH_FROM_HOME
@@ -223,38 +264,43 @@ def traverse_page(url, u_addr, access_info, depth=None):
       continue
 
     snap_date = int(snap_new[:8])
+    # TODO check if second condition will ever happen
     if snap_date < access_info.start_date or snap_date > access_info.end_date:
       continue
 
     if addr is not None:
-      addr = snap_new[:8] + '_' + addr
+      u_addr = get_unique_addr(snap_new[:8], addr)
 
     # check whether url is in the set using page specific url name
-    if addr is None or addr in seen_pages:
+    if addr is None or u_addr in seen_pages:
       continue
 
-    seen_pages.add(addr)
-    url_queue.append((addr, href, depth - 1))
+    seen_pages.add(u_addr)
+    url_queue.append((href, snap_new[:8], addr, depth - 1))
 
 
 def crawl(access_info):
   while url_queue:
-    u_addr, href, depth = url_queue.popleft()
+    href, snap, addr, depth = url_queue.popleft()
     print('traversing url: {}'.format(href))
-    traverse_page(href, u_addr, access_info, depth)
+    traverse_page(href, snap, addr, access_info, depth)
 
 
-# page: is an article
-# pub_date:
-def save_article(page, u_addr, pub_date):
+def save_article(page, pub_date, addr, article_name):
+  """
+  page: is an article
+  pub_date: (string)
+  addr:
+  article_name
+  """
   # save article
 
-  pub_date = str(pub_date)
   y = pub_date[:4]
   m = pub_date[4:6]
   d = pub_date[6:]
 
-  with open('./articles/{}'.format(u_addr), 'w+') as f:
+  with open('./articles/{}'.format(article_name), 'w+') as f:
+    # TODO write only the story of the page
     f.write(page)
 
 
@@ -327,6 +373,9 @@ def save_data_struc():
   with open("url_queue.p", "wb") as f:
     pickle.dump(url_queue, f)
 
+  with open("saved_pages.p", "wb") as f:
+    pickle.dump(saved_pages, f)
+
 
 def load_data_struc():
   try:
@@ -338,6 +387,10 @@ def load_data_struc():
       url_queue = pickle.load(f)
       print(url_queue)
 
+    with open("saved_pages.p", "rb") as f:
+      saved_pages = pickle.load(f)
+      print(saved_pages)
+
   except FileNotFoundError:
     print('data structures not yet pickled')
     seen_pages = set()
@@ -348,6 +401,10 @@ def signal_handler(signal, frame):
   print('pressed CTRL-C')
   save_data_struc()
   sys.exit(0)
+
+
+def get_unique_addr(snap, addr):
+  return snap + '_' + addr
 
 
 signal.signal(signal.SIGINT, signal_handler)
@@ -367,15 +424,16 @@ if __name__ == '__main__':
   load_data_struc()
 
   try:
-    for key, value in nytimes_home_pages.items():
-      addr = key + '_'
-      if addr not in seen_pages:
-        seen_pages.add(addr)
-        url_queue.append((addr, value[-1], MAX_DEPTH_FROM_HOME))
+    for snap, urls in nytimes_home_pages.items():
+      u_addr = get_unique_addr(snap, '')
+      if u_addr not in seen_pages:
+        seen_pages.add(u_addr)
+        url_queue.append((urls[-1], snap, '', MAX_DEPTH_FROM_HOME))
         break
 
     crawl(nytimes_info)
 
   except Exception as e:
     print(e)
+  finally:
     save_data_struc()
