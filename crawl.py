@@ -167,13 +167,14 @@ def get_page(url, snap, addr, access_info):
     try:
       response = urlopen(url)
     except error.HTTPError as h:
-      print_thread('url: {} got HttpError, error: {}'.format(url, h))
+      print_thread(
+          'url: {} got HttpError, error: {}'.format(url, h), error=True)
       return None
     except error.URLError as u:
-      print_thread('url: {} got URLError, error: {}'.format(url, u))
+      print_thread('url: {} got URLError, error: {}'.format(url, u), error=True)
       return None
     except Exception as e:
-      print_thread('url: {} got error, error: {}'.format(e))
+      print_thread('url: {} got error, error: {}'.format(e), error=True)
       return None
 
     if (response.getcode() == 200):
@@ -220,11 +221,13 @@ def get_page(url, snap, addr, access_info):
         page = response.read().decode('utf-8', 'ignore')
         return r_url, snap, addr, page
       except UnicodeDecodeError as e:
-        print_thread('error decoding page at url: {}, error: {}'.format(url, e))
+        print_thread(
+            'error decoding page at url: {}, error: {}'.format(url, e),
+            error=True)
         # input()
         return None
       except Exception as e:
-        print_thread('error: {}'.format(e))
+        print_thread('error: {}'.format(e), error=True)
         return None
 
     code = response.getcode()
@@ -355,6 +358,8 @@ class MultipleCrawls(threading.Thread):
         seen_page_lock.release()
 
         print_thread('traversing url: {}'.format(href))
+        print('{}: traversing url: {}'.format(threading.current_thread().name,
+                                              href))
         traverse_page(href, snap, addr, self.access_info, depth)
       else:
         seen_page_lock.release()
@@ -438,7 +443,7 @@ def nytimes_page_info(page, url):
         pub_date = datetime.strptime(date, '%B %d, %Y')
         pub_date = int(datetime.strftime(pub_date, '%Y%m%d'))
       except ValueError as e:
-        print_thread('error parsing date {}'.format(e))
+        print_thread('error parsing date {}'.format(e), error=True)
         pub_date = None
 
     if pub_date is None:
@@ -496,10 +501,14 @@ def get_unique_addr(snap, addr):
   return '{}_{}'.format(snap, addr)
 
 
-def print_thread(msg):
+def print_thread(msg, error=False):
   thread_name = threading.current_thread().name
   # print('{}: {}'.format(thread_name, msg))
-  print_queue.put('{}: {}'.format(thread_name, msg))
+  time = datetime.strftime(datetime.now(), "%Y%m%d%H%M%S")
+  if error:
+    print_queue.put('\nERROR\n{}_{}: {}\n'.format(thread_name, time, msg))
+  else:
+    print_queue.put('\n{}_{}: {}\n'.format(thread_name, time, msg))
 
 
 def signal_handler(signal, frame):
@@ -507,7 +516,7 @@ def signal_handler(signal, frame):
   save_data_struc()
 
   while not print_queue.empty():
-    log_file.write(print_queue.get() + '\n')
+    log_file.write(print_queue.get())
 
   log_file.close()
   sys.exit(0)
@@ -543,7 +552,7 @@ if __name__ == '__main__':
       threads.append(t)
 
     printing_thread = PrintingThread(print_queue, log_file)
-    t.append(printing_thread)
+    threads.append(printing_thread)
 
     for t in threads:
       t.start()

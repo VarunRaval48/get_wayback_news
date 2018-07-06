@@ -64,7 +64,7 @@ class PrintingThread(threading.Thread):
     self.file = file
 
   def run(self):
-    self.file.write(self.queue.get() + '\n')
+    self.file.write(self.queue.get())
 
 
 if __name__ == '__main__':
