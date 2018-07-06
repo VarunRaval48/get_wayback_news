@@ -1,7 +1,7 @@
 
 # Get WayBack News
 
-`crawl.py` contains the crawler to search for articles of given domain on [Wayback Machine](https://web.archive.org)
+`crawl.py` (python3) contains the crawler to search for articles of given domain on [Wayback Machine](https://web.archive.org)
 
 The task of program `crawl.py` is to search for articles on any given news website within any given date range in the past. For example, search for news articles appeared on website nytimes.com during London Olympics 2012 (27 July to 12 August 2012).
 
