@@ -6,6 +6,7 @@ import json
 from urllib.request import urlopen
 from urllib import error
 from collections import deque
+from datetime import datetime
 
 from bs4 import BeautifulSoup
 
@@ -238,6 +239,9 @@ def traverse_page(url, snap, orig_addr, access_info, depth=None):
       url, is_proper_page, is_article, pub_date))
   input()
 
+  if not is_proper_page:
+    return
+
   if (is_proper_page and is_article) or (depth is not None and depth == 0):
     # look for article
     if not is_article:
@@ -365,9 +369,20 @@ def nytimes_page_info(page, url):
     meta_pdate_tag = soup.find('meta', attrs={'name': 'pdate'})
     if meta_pdate_tag is not None:
       pub_date = int(meta_pdate_tag['content'])
-    else:
+
+    if pub_date is None:
+      time_tag = soup.find('div', class_='timestamp')
+      date = time_tag.string.split(":")[1].strip()
+      try:
+        pub_date = datetime.strptime(date, '%B %d, %Y')
+        pub_date = datetime.strftime(pub_date, '%Y%m%d')
+      except ValueError as e:
+        print('error parsing date {}'.format(e))
+        pub_date = None
+
+    if pub_date is None:
       is_article = False
-      print('{} is not article (does not have pdate)'.format(url))
+      print('{} is not article (cannot find pub date)'.format(url))
 
   if is_article:
     return is_proper_page, is_article, pub_date
@@ -388,6 +403,7 @@ def save_data_struc():
 
 
 def load_data_struc():
+  global seen_pages, url_queue, saved_pages
   try:
     with open("seen_pages.p", "rb") as f:
       seen_pages = pickle.load(f)
@@ -405,6 +421,7 @@ def load_data_struc():
     print('data structures not yet pickled')
     seen_pages = set()
     url_queue = deque()
+    saved_pages = set()
 
 
 def signal_handler(signal, frame):
