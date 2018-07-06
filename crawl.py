@@ -5,18 +5,22 @@ import time
 import json
 from urllib.request import urlopen
 from urllib import error
-from collections import deque
 from datetime import datetime
+
+from collections import deque
+from queue import Queue
 
 import threading
 
 from bs4 import BeautifulSoup
 
 from util import get_date_format, get_page_addr, get_snapshot_number
+from util import PrintingThread
 
 MAX_DEPTH_FROM_HOME = 2
 MAX_TRIES = 5
 MAX_THREADS = 4
+LOG_FILE = './logs'
 
 empty_threads = 0
 
@@ -32,6 +36,9 @@ url_queue = deque()
 
 seen_page_lock = threading.Lock()
 saved_page_lock = threading.Lock()
+
+print_queue = Queue()
+log_file = open(LOG_FILE, "a+")
 
 
 class AccessInfo:
@@ -160,13 +167,13 @@ def get_page(url, snap, addr, access_info):
     try:
       response = urlopen(url)
     except error.HTTPError as h:
-      print('url: {} got HttpError, error: {}'.format(url, h))
+      print_thread('url: {} got HttpError, error: {}'.format(url, h))
       return None
     except error.URLError as u:
-      print('url: {} got URLError, error: {}'.format(url, u))
+      print_thread('url: {} got URLError, error: {}'.format(url, u))
       return None
     except Exception as e:
-      print('url: {} got error, error: {}'.format(e))
+      print_thread('url: {} got error, error: {}'.format(e))
       return None
 
     if (response.getcode() == 200):
@@ -181,8 +188,8 @@ def get_page(url, snap, addr, access_info):
         # (look at function traverse_page and when queue is loaded first time)
 
         if r_snap is None:
-          print('response url is different {}'.format(r_url))
-          print('snap:', snap, 'r_snap', r_snap)
+          print_thread('response url is different {}'.format(r_url))
+          print_thread('snap:', snap, 'r_snap', r_snap)
           return None
 
         snap = r_snap[:8]
@@ -191,19 +198,19 @@ def get_page(url, snap, addr, access_info):
         # only see if its after start date
         # TODO see if it has to be after cur snap
         if snap_date < access_info.start_date:
-          print("response url's snap is out of range {}".format(r_url))
+          print_thread("response url's snap is out of range {}".format(r_url))
           return None
 
         addr = get_page_addr(r_url, access_info.domain_name)
         if addr is None:
-          print('response url is invalid: {}'.format(r_url))
+          print_thread('response url is invalid: {}'.format(r_url))
           return None
 
         u_addr = get_unique_addr(snap, addr)
 
         seen_page_lock.acquire()
         if u_addr in seen_pages:
-          print('response url is already seen: {}'.format(r_url))
+          print_thread('response url is already seen: {}'.format(r_url))
 
         seen_pages.add(u_addr)
 
@@ -213,18 +220,18 @@ def get_page(url, snap, addr, access_info):
         page = response.read().decode('utf-8', 'ignore')
         return r_url, snap, addr, page
       except UnicodeDecodeError as e:
-        print('error decoding page at url: {}, error: {}'.format(url, e))
+        print_thread('error decoding page at url: {}, error: {}'.format(url, e))
         # input()
         return None
       except Exception as e:
-        print('error: {}'.format(e))
+        print_thread('error: {}'.format(e))
         return None
 
     code = response.getcode()
     tries += 1
 
   # log here about url and response
-  print("{}: response code: {}".format(url, code))
+  print_thread("{}: response code: {}".format(url, code))
   return None
 
 
@@ -246,8 +253,9 @@ def traverse_page(url, snap, orig_addr, access_info, depth=None):
   url, snap, r_addr, page = ret
 
   is_proper_page, is_article, pub_date = access_info.get_page_info(page, url)
-  print('page {} is_proper_page: {}, is_article: {}, pub_date: {}'.format(
-      url, is_proper_page, is_article, pub_date))
+  print_thread(
+      'page {} is_proper_page: {}, is_article: {}, pub_date: {}'.format(
+          url, is_proper_page, is_article, pub_date))
   # input()
 
   if not is_proper_page:
@@ -275,6 +283,7 @@ def traverse_page(url, snap, orig_addr, access_info, depth=None):
       access_info.save_article(page, str(pub_date), r_addr, article_name)
 
     saved_page_lock.release()
+    return
 
   if depth is None:
     depth = MAX_DEPTH_FROM_HOME
@@ -345,7 +354,7 @@ class MultipleCrawls(threading.Thread):
 
         seen_page_lock.release()
 
-        print('traversing url: {}'.format(href))
+        print_thread('traversing url: {}'.format(href))
         traverse_page(href, snap, addr, self.access_info, depth)
       else:
         seen_page_lock.release()
@@ -377,7 +386,7 @@ def save_article(page, pub_date, addr, article_name):
 # page: page on the web
 # url
 # Returns: whether it is nytimes page (true or false), whether it is article (true or false),
-#          publication date (None or date)
+#          publication date (int yyyymmdd) (None or date)
 def nytimes_page_info(page, url):
   is_proper_page = False
   is_article = False
@@ -391,7 +400,7 @@ def nytimes_page_info(page, url):
 
   if soup.title is not None:
     title = str(soup.title.string).lower()
-    print(title)
+    print_thread(title)
 
     find = ['nytimes.com', 'the new york times']
     for name in find:
@@ -405,7 +414,7 @@ def nytimes_page_info(page, url):
       is_proper_page = 'the new york times' in meta_cre_tag['content'].lower()
 
   if not is_proper_page:
-    print('page {} is not proper'.format(url))
+    print_thread('page {} is not proper'.format(url))
     return False, False, None
 
   meta_articleid_tag = soup.find('meta', attrs={'name': 'articleid'})
@@ -422,28 +431,29 @@ def nytimes_page_info(page, url):
   #   date = soup.find('div', class_='timestamp')
 
   if is_article:
-    meta_pdate_tag = soup.find('meta', attrs={'name': 'pdate'})
-    if meta_pdate_tag is not None:
-      pub_date = int(meta_pdate_tag['content'])
-
-    if pub_date is None:
-      time_tag = soup.find('div', class_='timestamp')
-      date = time_tag.string.split(":")[1].strip()
+    time_tag = soup.find('div', class_='timestamp')
+    if time_tag is not None:
+      date = time_tag.string.split(":")[-1].strip()
       try:
         pub_date = datetime.strptime(date, '%B %d, %Y')
-        pub_date = datetime.strftime(pub_date, '%Y%m%d')
+        pub_date = int(datetime.strftime(pub_date, '%Y%m%d'))
       except ValueError as e:
-        print('error parsing date {}'.format(e))
+        print_thread('error parsing date {}'.format(e))
         pub_date = None
 
     if pub_date is None:
+      meta_pdate_tag = soup.find('meta', attrs={'name': 'pdate'})
+      if meta_pdate_tag is not None:
+        pub_date = int(meta_pdate_tag['content'])
+
+    if pub_date is None:
       is_article = False
-      print('{} is not article (cannot find pub date)'.format(url))
+      print_thread('{} is not article (cannot find pub date)'.format(url))
 
   if is_article:
     return is_proper_page, is_article, pub_date
   else:
-    print('url {} is not article'.format(url))
+    print_thread('url {} is not article'.format(url))
     return is_proper_page, is_article, None
 
 
@@ -480,16 +490,27 @@ def load_data_struc():
     saved_pages = set()
 
 
-def signal_handler(signal, frame):
-  print('pressed CTRL-C')
-  save_data_struc()
-  sys.exit(0)
-
-
 # snap: yyyymmdd
 # addr: path of page
 def get_unique_addr(snap, addr):
   return '{}_{}'.format(snap, addr)
+
+
+def print_thread(msg):
+  thread_name = threading.current_thread().name
+  # print('{}: {}'.format(thread_name, msg))
+  print_queue.put('{}: {}'.format(thread_name, msg))
+
+
+def signal_handler(signal, frame):
+  print('pressed CTRL-C')
+  save_data_struc()
+
+  while not print_queue.empty():
+    log_file.write(print_queue.get() + '\n')
+
+  log_file.close()
+  sys.exit(0)
 
 
 signal.signal(signal.SIGINT, signal_handler)
@@ -514,12 +535,15 @@ if __name__ == '__main__':
       if u_addr not in seen_pages:
         seen_pages.add(u_addr)
         url_queue.append((urls[-1], snap, '', MAX_DEPTH_FROM_HOME))
-        break
+        # break
 
     threads = []
     for _ in range(MAX_THREADS):
       t = MultipleCrawls(nytimes_info)
       threads.append(t)
+
+    printing_thread = PrintingThread(print_queue, log_file)
+    t.append(printing_thread)
 
     for t in threads:
       t.start()
