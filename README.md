@@ -10,6 +10,7 @@ The task of program `crawl.py` is to search for articles on any given news websi
   2. Make an instance of class `AccessInfo` with required information
   3. Pass that object of `AccessInfo` to the method `start_crawl`
   4. AccessInfo asks for a method that parses given html page and provide page info (Look at `nytimes_page_info`). Reason for that is given below.
+  5. Run the file using `path-to-python3-installation crawl.py`
 
 ### Output:
   1. Messages will be printed on the standard output regarding url being traversed and any errors
