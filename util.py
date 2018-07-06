@@ -1,3 +1,7 @@
+import pickle
+import threading
+
+
 def get_date_format(y, m, d):
   """
   Returns: date in yyyymmdd format
@@ -46,6 +50,25 @@ def get_snapshot_number(url):
     return None
 
 
+def read_pickle(pickle_file):
+  with open(pickle_file, "rb") as f:
+    loaded = pickle.load(f)
+    print(loaded)
+    print(len(loaded))
+
+
+class PrintingThread(threading.Thread):
+  def __init__(self, queue, file):
+    threading.Thread.__init__(self)
+    self.queue = queue
+    self.file = file
+
+  def run(self):
+    self.file.write(self.queue.get() + '\n')
+
+
 if __name__ == '__main__':
-  url = 'https://www.nytimes.com/a/1/2.html'
-  print(get_page_addr(url, 'nytimes.com'))
+  # url = 'https://www.nytimes.com/a/1/2.html'
+  # print(get_page_addr(url, 'nytimes.com'))
+
+  read_pickle('url_queue.p')
