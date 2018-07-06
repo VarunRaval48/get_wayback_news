@@ -17,9 +17,16 @@ from bs4 import BeautifulSoup
 from util import get_date_format, get_page_addr, get_snapshot_number
 from util import PrintingThread
 
+# depth to search for
 MAX_DEPTH_FROM_HOME = 3
+
+# maximum number of tries when response code is not 200
 MAX_TRIES = 5
+
+# number of threads to run
 MAX_THREADS = 7
+
+# path to save the log file
 LOG_FILE = './logs'
 
 empty_threads = 0
@@ -41,14 +48,29 @@ print_queue = Queue()
 log_file = open(LOG_FILE, "a+")
 
 
+def signal_handler(signal, frame):
+  print('pressed CTRL-C')
+  save_data_struc()
+
+  while not print_queue.empty():
+    log_file.write(print_queue.get())
+
+  log_file.close()
+  sys.exit(0)
+
+
+signal.signal(signal.SIGINT, signal_handler)
+
+
 class AccessInfo:
   """
   year: year to search for
   month: month to start from
-  dat: day of month to start from
+  day: day of month to start from
   no_days: number of days from day to search for
   end_date: string in format yyyymmdd
   url:
+  domain_name:
   get_page_info: method to get info about page
   save_article: method to save article
   """
@@ -134,7 +156,7 @@ def get_page(url, snap, addr, access_info):
   addr: address of the page in nytimes.com
   access_info:
 
-  Returns: r_url, snap, addr, page if obtained else None
+  Returns: r_url (response url), snap, addr, page if obtained else None
   """
 
   tries = 0
@@ -210,7 +232,7 @@ def get_page(url, snap, addr, access_info):
     tries += 1
 
   # log here about url and response
-  print_thread("{}: response code: {}".format(url, code))
+  print_thread("{}: response code: {}".format(url, code), error=True)
   return None
 
 
@@ -312,6 +334,11 @@ def crawl(access_info):
 
 
 class MultipleCrawls(threading.Thread):
+  """
+  access_info:
+
+  """
+
   def __init__(self, access_info):
     threading.Thread.__init__(self)
     self.access_info = access_info
@@ -351,24 +378,25 @@ def save_article(page, pub_date, addr, article_name):
   page: is an article
   pub_date: (string)
   addr:
-  article_name
+  article_name:
+
   """
   # save article
-
-  y = pub_date[:4]
-  m = pub_date[4:6]
-  d = pub_date[6:]
 
   with open('./articles/{}'.format(article_name), 'w+') as f:
     # TODO write only the story of the page
     f.write(page)
 
 
-# page: page on the web
-# url
-# Returns: whether it is nytimes page (true or false), whether it is article (true or false),
-#          publication date (int yyyymmdd) (None or date)
 def nytimes_page_info(page, url):
+  """
+  page: page on the web
+  url:
+
+  Returns: whether it is nytimes page (true or false), whether it is article (true or false),
+           publication date (int yyyymmdd) (None or date)
+  """
+
   is_proper_page = False
   is_article = False
   pub_date = None
@@ -398,6 +426,7 @@ def nytimes_page_info(page, url):
     print_thread('page {} is not proper'.format(url))
     return False, False, None
 
+  # check whether page is article
   meta_articleid_tag = soup.find('meta', attrs={'name': 'articleid'})
   if meta_articleid_tag is not None:
     is_article = True
@@ -411,6 +440,8 @@ def nytimes_page_info(page, url):
   # if date is None:
   #   date = soup.find('div', class_='timestamp')
 
+  # if it is an article, find publication date, if publication date is not found,
+  # it is not article
   if is_article:
     time_tag = soup.find('div', class_='timestamp')
     if time_tag is not None:
@@ -422,6 +453,7 @@ def nytimes_page_info(page, url):
         print_thread('error parsing date {}'.format(e), error=True)
         pub_date = None
 
+    # make another try
     if pub_date is None:
       meta_pdate_tag = soup.find('meta', attrs={'name': 'pdate'})
       if meta_pdate_tag is not None:
@@ -454,15 +486,15 @@ def load_data_struc():
   try:
     with open("seen_pages.p", "rb") as f:
       seen_pages = pickle.load(f)
-      print(seen_pages)
+      print('number of seen pages', len(seen_pages))
 
     with open("url_queue.p", "rb") as f:
       url_queue = pickle.load(f)
-      print(url_queue)
+      print('length of url queue', len(url_queue))
 
     with open("saved_pages.p", "rb") as f:
       saved_pages = pickle.load(f)
-      print(saved_pages)
+      print('number of saved pages', len(saved_pages))
 
   except FileNotFoundError:
     print('data structures not yet pickled')
@@ -471,17 +503,24 @@ def load_data_struc():
     saved_pages = set()
 
 
-# snap: yyyymmdd
-# addr: path of page
 def get_unique_addr(snap, addr):
+  """
+  snap: yyyymmdd
+  addr: path of page
+
+  Returns: the format to save address
+  """
+
   return '{}_{}'.format(snap, addr)
 
 
 def print_thread(msg, error=False):
   thread_name = threading.current_thread().name
   # print('{}: {}'.format(thread_name, msg))
+
   time = datetime.strftime(datetime.now(), "%Y%m%d%H%M%S")
-  print('number of articles saved: {}'.format(len(saved_pages)))
+  # print('number of articles saved: {}'.format(len(saved_pages)))
+
   if error:
     p_msg = '\nERROR\n{}_{}: {}\n'.format(thread_name, time, msg)
     print(p_msg)
@@ -490,44 +529,22 @@ def print_thread(msg, error=False):
     print_queue.put('\n{}_{}: {}\n'.format(thread_name, time, msg))
 
 
-def signal_handler(signal, frame):
-  print('pressed CTRL-C')
-  save_data_struc()
-
-  while not print_queue.empty():
-    log_file.write(print_queue.get())
-
-  log_file.close()
-  sys.exit(0)
-
-
-signal.signal(signal.SIGINT, signal_handler)
-
-if __name__ == '__main__':
-
-  year, month, day = 2010, 1, 1
-  url, domain_name = "http://www.nytimes.com/", "nytimes.com"
-  no_days = 31
-  end_date = 20100131
-  nytimes_info = AccessInfo(year, month, day, no_days, end_date, url,
-                            domain_name, nytimes_page_info, save_article)
-
-  nytimes_home_pages = get_home_page_urls(nytimes_info)
-  print(nytimes_home_pages)
+def start_crawl(access_info):
+  home_pages = get_home_page_urls(access_info)
+  # print(home_pages)
 
   load_data_struc()
 
   try:
-    for snap, urls in nytimes_home_pages.items():
+    for snap, urls in home_pages.items():
       u_addr = get_unique_addr(snap, '')
       if u_addr not in seen_pages:
         seen_pages.add(u_addr)
         url_queue.append((urls[-1], snap, '', MAX_DEPTH_FROM_HOME))
-        # break
 
     threads = []
     for _ in range(MAX_THREADS):
-      t = MultipleCrawls(nytimes_info)
+      t = MultipleCrawls(access_info)
       threads.append(t)
 
     printing_thread = PrintingThread(print_queue, log_file)
@@ -539,10 +556,20 @@ if __name__ == '__main__':
     for t in threads:
       t.join()
 
-    # crawl(nytimes_info)
-
   except Exception as e:
     print(e)
   finally:
     log_file.close()
     save_data_struc()
+
+
+if __name__ == '__main__':
+
+  year, month, day = 2010, 1, 1
+  url, domain_name = "http://www.nytimes.com/", "nytimes.com"
+  no_days = 31
+  end_date = 20100131
+  nytimes_info = AccessInfo(year, month, day, no_days, end_date, url,
+                            domain_name, nytimes_page_info, save_article)
+
+  start_crawl(nytimes_info)
