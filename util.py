@@ -27,7 +27,7 @@ def get_page_addr(url, domain):
   while (index < len(url) and url[index] != '/'):
     index += 1
 
-  return url[index + 1:].replace('/', '_').split("?")[0]
+  return url[index + 1:].replace('/', '_')
 
 
 def get_snapshot_number(url):
