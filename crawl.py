@@ -8,12 +8,17 @@ from urllib import error
 from collections import deque
 from datetime import datetime
 
+import threading
+
 from bs4 import BeautifulSoup
 
 from util import get_date_format, get_page_addr, get_snapshot_number
 
 MAX_DEPTH_FROM_HOME = 2
 MAX_TRIES = 5
+MAX_THREADS = 4
+
+empty_threads = 0
 
 seen_pages = set()
 
@@ -24,6 +29,9 @@ saved_pages = set()
 
 # format of queue is (url, snapshot (string), page_address, depth)
 url_queue = deque()
+
+seen_page_lock = threading.Lock()
+saved_page_lock = threading.Lock()
 
 
 class AccessInfo:
@@ -193,17 +201,20 @@ def get_page(url, snap, addr, access_info):
 
         u_addr = get_unique_addr(snap, addr)
 
+        seen_page_lock.acquire()
         if u_addr in seen_pages:
           print('response url is already seen: {}'.format(r_url))
 
         seen_pages.add(u_addr)
+
+        seen_page_lock.release()
 
       try:
         page = response.read().decode('utf-8', 'ignore')
         return r_url, snap, addr, page
       except UnicodeDecodeError as e:
         print('error decoding page at url: {}, error: {}'.format(url, e))
-        input()
+        # input()
         return None
       except Exception as e:
         print('error: {}'.format(e))
@@ -237,7 +248,7 @@ def traverse_page(url, snap, orig_addr, access_info, depth=None):
   is_proper_page, is_article, pub_date = access_info.get_page_info(page, url)
   print('page {} is_proper_page: {}, is_article: {}, pub_date: {}'.format(
       url, is_proper_page, is_article, pub_date))
-  input()
+  # input()
 
   if not is_proper_page:
     return
@@ -252,10 +263,18 @@ def traverse_page(url, snap, orig_addr, access_info, depth=None):
     if pub_date < access_info.start_date or pub_date > access_info.end_date:
       return
 
+    # remove string after ? in address (they indicate sections)
+    # TODO check here whether things after ? change pages
+    r_addr = r_addr.split("?")[0]
+
     article_name = '{}_{}'.format(pub_date, r_addr)
+
+    saved_page_lock.acquire()
     if article_name not in saved_pages:
       saved_pages.add(article_name)
       access_info.save_article(page, str(pub_date), r_addr, article_name)
+
+    saved_page_lock.release()
 
   if depth is None:
     depth = MAX_DEPTH_FROM_HOME
@@ -267,6 +286,8 @@ def traverse_page(url, snap, orig_addr, access_info, depth=None):
   soup = BeautifulSoup(page, 'html5lib')
 
   all_as = soup.find_all('a', href=True)
+
+  seen_page_lock.acquire()
 
   for a_tag in all_as:
     href = str(a_tag['href'])
@@ -292,12 +313,47 @@ def traverse_page(url, snap, orig_addr, access_info, depth=None):
     seen_pages.add(u_addr)
     url_queue.append((href, snap_new[:8], addr, depth - 1))
 
+  seen_page_lock.release()
+
 
 def crawl(access_info):
   while url_queue:
     href, snap, addr, depth = url_queue.popleft()
     print('traversing url: {}'.format(href))
     traverse_page(href, snap, addr, access_info, depth)
+
+
+class MultipleCrawls(threading.Thread):
+  def __init__(self, access_info):
+    threading.Thread.__init__(self)
+    self.access_info = access_info
+    self.empty_count = 0
+
+  def run(self):
+    global empty_threads
+    while True:
+      seen_page_lock.acquire()
+      if url_queue:
+        seen_page_lock.release()
+        if self.empty_count == 1:
+          empty_threads -= 1
+          self.empty_count = 0
+
+        seen_page_lock.acquire()
+
+        href, snap, addr, depth = url_queue.popleft()
+
+        seen_page_lock.release()
+
+        print('traversing url: {}'.format(href))
+        traverse_page(href, snap, addr, self.access_info, depth)
+      else:
+        seen_page_lock.release()
+        if self.empty_count == 0:
+          self.empty_count = 1
+          empty_threads += 1
+          if empty_threads >= MAX_THREADS:
+            break
 
 
 def save_article(page, pub_date, addr, article_name):
@@ -460,7 +516,18 @@ if __name__ == '__main__':
         url_queue.append((urls[-1], snap, '', MAX_DEPTH_FROM_HOME))
         break
 
-    crawl(nytimes_info)
+    threads = []
+    for _ in range(MAX_THREADS):
+      t = MultipleCrawls(nytimes_info)
+      threads.append(t)
+
+    for t in threads:
+      t.start()
+
+    for t in threads:
+      t.join()
+
+    # crawl(nytimes_info)
 
   except Exception as e:
     print(e)
