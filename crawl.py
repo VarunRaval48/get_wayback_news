@@ -75,30 +75,6 @@ class AccessInfo:
     self.save_article = save_article
 
 
-class ArticleInfo:
-  """
-  used for saving the article
-
-  pyear:
-  pmonth:
-  pday:
-  title:
-  surl: url specific to this article
-  scat: specific category of this article
-  """
-
-  def __init__(self, pyear, pmonth, pday, title, surl, scat=None):
-    self.pyear = pyear
-    self.pmonth = pmonth
-    self.pday = pday
-
-    self.title = title
-
-    self.surl = surl
-
-    self.scat = scat
-
-
 def traverse_calendar(data, access_info):
   """
   data: list obtained from json data of calendar
