@@ -17,9 +17,9 @@ from bs4 import BeautifulSoup
 from util import get_date_format, get_page_addr, get_snapshot_number
 from util import PrintingThread
 
-MAX_DEPTH_FROM_HOME = 2
+MAX_DEPTH_FROM_HOME = 3
 MAX_TRIES = 5
-MAX_THREADS = 4
+MAX_THREADS = 7
 LOG_FILE = './logs'
 
 empty_threads = 0
@@ -150,7 +150,7 @@ def get_page(url, snap, addr, access_info):
       print_thread('url: {} got URLError, error: {}'.format(url, u), error=True)
       return None
     except Exception as e:
-      print_thread('url: {} got error, error: {}'.format(e), error=True)
+      print_thread('url: {} got error, error: {}'.format(url, e), error=True)
       return None
 
     if (response.getcode() == 200):
