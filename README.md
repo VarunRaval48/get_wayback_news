@@ -34,7 +34,7 @@ Task to detect whether a page is an article is different for each domain. For ex
 Similarly, task to look for story content is also different for different domains. For nytimes.com, one can look for string in `p` tag within `div id='articleBody'` tag. This task is not included in `crawl.py`. This task can be done as a different process to reduce the overhead.
 
 ### Results:
-I ran this crawler on nytimes.com for 5 hours for date range 1 January 2010 - 31 January 2010, and retrieved 2084 articles. I shutdown the crawler after this and pickled the data structures. One can run this crawler from the current state and can find more articles.
+I ran this crawler on nytimes.com for 5 hours for date range 1 January 2010 - 31 January 2010, and retrieved 2084 articles. I stopped the crawler after this and pickled the data structures. One can run this crawler from the current state and can find more articles.
 
 
 ### Uses of this crawler:
