@@ -481,8 +481,11 @@ def print_thread(msg, error=False):
   thread_name = threading.current_thread().name
   # print('{}: {}'.format(thread_name, msg))
   time = datetime.strftime(datetime.now(), "%Y%m%d%H%M%S")
+  print('number of articles saved: {}'.format(len(saved_pages)))
   if error:
-    print_queue.put('\nERROR\n{}_{}: {}\n'.format(thread_name, time, msg))
+    p_msg = '\nERROR\n{}_{}: {}\n'.format(thread_name, time, msg)
+    print(p_msg)
+    print_queue.put(p_msg)
   else:
     print_queue.put('\n{}_{}: {}\n'.format(thread_name, time, msg))
 
