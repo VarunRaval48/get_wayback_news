@@ -541,4 +541,5 @@ if __name__ == '__main__':
   except Exception as e:
     print(e)
   finally:
+    log_file.close()
     save_data_struc()
