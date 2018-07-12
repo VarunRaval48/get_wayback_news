@@ -345,6 +345,8 @@ class MultipleCrawls(threading.Thread):
     self.empty_count = 0
 
   def run(self):
+    # TODO empty_threads is a global variable, it needs a lock also
+    # TODO change how to know crawler is done
     global empty_threads
     while True:
       seen_page_lock.acquire()
