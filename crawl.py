@@ -387,7 +387,7 @@ def save_article(page, pub_date, addr, article_name):
   """
   # save article
 
-  print(article_name)
+  # print(article_name)
   # os.makedirs(os.path.dirname(article_name), exist_ok=True)
   with open('./articles/{}'.format(article_name), 'w+') as f:
     # TODO write only the story of the page
