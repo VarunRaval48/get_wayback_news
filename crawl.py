@@ -1,3 +1,4 @@
+import os
 import sys
 import signal
 import pickle
@@ -161,8 +162,10 @@ def get_page(url, snap, addr, access_info):
 
   tries = 0
   code = None
+  response = None
   while (tries < MAX_TRIES):
     try:
+      print_thread("urlopen {}".format(url), debug=True)
       response = urlopen(url)
     except error.HTTPError as h:
       print_thread(
@@ -170,12 +173,14 @@ def get_page(url, snap, addr, access_info):
       return None
     except error.URLError as u:
       print_thread('url: {} got URLError, error: {}'.format(url, u), error=True)
-      return None
     except Exception as e:
       print_thread('url: {} got error, error: {}'.format(url, e), error=True)
-      return None
+    finally:
+      tries += 1
+      if response is not None:
+        code = response.getcode()
 
-    if (response.getcode() == 200):
+    if (response is not None and code == 200):
       r_url = response.geturl()
 
       if url != r_url:
@@ -207,13 +212,11 @@ def get_page(url, snap, addr, access_info):
 
         u_addr = get_unique_addr(snap, addr)
 
-        seen_page_lock.acquire()
-        if u_addr in seen_pages:
-          print_thread('response url is already seen: {}'.format(r_url))
+        with seen_page_lock:
+          if u_addr in seen_pages:
+            print_thread('response url is already seen: {}'.format(r_url))
 
-        seen_pages.add(u_addr)
-
-        seen_page_lock.release()
+          seen_pages.add(u_addr)
 
       try:
         page = response.read().decode('utf-8', 'ignore')
@@ -227,9 +230,6 @@ def get_page(url, snap, addr, access_info):
       except Exception as e:
         print_thread('error: {}'.format(e), error=True)
         return None
-
-    code = response.getcode()
-    tries += 1
 
   # log here about url and response
   print_thread("{}: response code: {}".format(url, code), error=True)
@@ -253,7 +253,7 @@ def traverse_page(url, snap, orig_addr, access_info, depth=None):
 
   url, snap, r_addr, page = ret
 
-  soup, is_proper_page, is_article, pub_date = access_info.get_page_info(
+  soup, is_proper_page, pub_date_home, is_article, pub_date = access_info.get_page_info(
       page, url)
   print_thread(
       'page {} is_proper_page: {}, is_article: {}, pub_date: {}'.format(
@@ -279,16 +279,19 @@ def traverse_page(url, snap, orig_addr, access_info, depth=None):
 
     article_name = '{}_{}'.format(pub_date, r_addr)
 
-    saved_page_lock.acquire()
-    if article_name not in saved_pages:
-      saved_pages.add(article_name)
-      access_info.save_article(page, str(pub_date), r_addr, article_name)
+    with saved_page_lock:
+      if article_name not in saved_pages:
+        saved_pages.add(article_name)
+        access_info.save_article(page, str(pub_date), r_addr, article_name)
 
-    saved_page_lock.release()
     return
 
   if depth is None:
     depth = MAX_DEPTH_FROM_HOME
+
+  if pub_date_home is not None:
+    if pub_date_home < access_info.start_date or pub_date_home > access_info.end_date:
+      return
 
   # look at all the urls
   # add to list: url that are article with depth 0
@@ -298,33 +301,31 @@ def traverse_page(url, snap, orig_addr, access_info, depth=None):
 
   all_as = soup.find_all('a', href=True)
 
-  seen_page_lock.acquire()
+  with seen_page_lock:
 
-  for a_tag in all_as:
-    href = str(a_tag['href'])
+    for a_tag in all_as:
+      href = str(a_tag['href'])
 
-    addr = get_page_addr(href, access_info.domain_name)
+      addr = get_page_addr(href, access_info.domain_name)
 
-    snap_new = get_snapshot_number(href)
-    if snap_new is None:
-      continue
+      snap_new = get_snapshot_number(href)
+      if snap_new is None:
+        continue
 
-    snap_date = int(snap_new[:8])
-    # TODO check if second condition will ever happen
-    if snap_date < access_info.start_date or snap_date > access_info.end_date:
-      continue
+      snap_date = int(snap_new[:8])
+      # TODO check if second condition will ever happen
+      if snap_date < access_info.start_date or snap_date > access_info.end_date:
+        continue
 
-    if addr is not None:
-      u_addr = get_unique_addr(snap_new[:8], addr)
+      if addr is not None:
+        u_addr = get_unique_addr(snap_new[:8], addr)
 
-    # check whether url is in the set using page specific url name
-    if addr is None or u_addr in seen_pages:
-      continue
+      # check whether url is in the set using page specific url name
+      if addr is None or u_addr in seen_pages:
+        continue
 
-    seen_pages.add(u_addr)
-    url_queue.append((href, snap_new[:8], addr, depth - 1))
-
-  seen_page_lock.release()
+      seen_pages.add(u_addr)
+      url_queue.append((href, snap_new[:8], addr, depth - 1))
 
 
 def crawl(access_info):
@@ -350,28 +351,30 @@ class MultipleCrawls(threading.Thread):
     # TODO change how to know crawler is done
     global empty_threads
     while True:
-      seen_page_lock.acquire()
-      if url_queue:
-        if self.empty_count == 1:
-          empty_threads -= 1
-          self.empty_count = 0
+      try:
+        seen_page_lock.acquire()
+        if url_queue:
+          if self.empty_count == 1:
+            empty_threads -= 1
+            self.empty_count = 0
 
-        href, snap, addr, depth = url_queue.popleft()
+          href, snap, addr, depth = url_queue.popleft()
 
-        seen_page_lock.release()
+          seen_page_lock.release()
 
-        print_thread('traversing url: {}'.format(href))
-        print('{}: traversing url: {}'.format(threading.current_thread().name,
-                                              href))
-        traverse_page(href, snap, addr, self.access_info, depth)
-      else:
-        if self.empty_count == 0:
-          self.empty_count = 1
-          empty_threads += 1
+          print_thread('traversing url: {}'.format(href), debug=True)
+          traverse_page(href, snap, addr, self.access_info, depth)
+        else:
+          if self.empty_count == 0:
+            self.empty_count = 1
+            empty_threads += 1
+
           if empty_threads >= MAX_THREADS:
             seen_page_lock.release()
             break
           seen_page_lock.release()
+      except Exception as e:
+        print_thread(e, error=True)
 
 
 def save_article(page, pub_date, addr, article_name):
@@ -384,6 +387,8 @@ def save_article(page, pub_date, addr, article_name):
   """
   # save article
 
+  print(article_name)
+  # os.makedirs(os.path.dirname(article_name), exist_ok=True)
   with open('./articles/{}'.format(article_name), 'w+') as f:
     # TODO write only the story of the page
     f.write(page)
@@ -394,11 +399,14 @@ def nytimes_page_info(page, url):
   page: page on the web
   url:
 
-  Returns: whether it is nytimes page (true or false), whether it is article (true or false),
-           publication date (int yyyymmdd) (None or date)
+  Returns: soup contents, whether it is nytimes page (true or false), 
+           if not article publication date of page (int yyyymmdd) (None or date),
+           whether it is article (true or false), 
+           publication date of article (int yyyymmdd) (None or date)
   """
 
   is_proper_page = False
+  pub_date_home = None
   is_article = False
   pub_date = None
 
@@ -425,7 +433,7 @@ def nytimes_page_info(page, url):
 
   if not is_proper_page:
     print_thread('page {} is not proper'.format(url))
-    return soup, False, False, None
+    return soup, False, None, False, None
 
   # check whether page is article
   meta_articleid_tag = soup.find('meta', attrs={'name': 'articleid'})
@@ -464,11 +472,29 @@ def nytimes_page_info(page, url):
       is_article = False
       print_thread('{} is not article (cannot find pub date)'.format(url))
 
+  # check publish date of home page if it is proper page and not article
+  if not is_article:
+    id_time = soup.find("div", id="time")
+    if id_time is not None:
+      id_time_contents = id_time.contents
+      if id_time_contents:
+        p_tag = id_time_contents[0]
+        p_contents = p_tag.contents
+        if p_contents:
+          date = p_contents[0]
+          date = date.strip()
+          try:
+            pub_date_home = datetime.strptime(date, "%A, %B %d, %Y")
+            pub_date_home = int(datetime.strftime(pub_date_home, '%Y%m%d'))
+          except ValueError as e:
+            print_thread('error parsing date {}'.format(e), error=True)
+            pub_date_home = None
+
   if is_article:
-    return soup, is_proper_page, is_article, pub_date
+    return soup, is_proper_page, pub_date_home, is_article, pub_date
   else:
     print_thread('url {} is not article'.format(url))
-    return soup, is_proper_page, is_article, None
+    return soup, is_proper_page, pub_date_home, is_article, None
 
 
 def save_data_struc():
@@ -515,7 +541,7 @@ def get_unique_addr(snap, addr):
   return '{}_{}'.format(snap, addr)
 
 
-def print_thread(msg, error=False):
+def print_thread(msg, error=False, debug=False):
   thread_name = threading.current_thread().name
   # print('{}: {}'.format(thread_name, msg))
 
@@ -527,7 +553,10 @@ def print_thread(msg, error=False):
     print(p_msg)
     print_queue.put(p_msg)
   else:
-    print_queue.put('\n{}_{}: {}\n'.format(thread_name, time, msg))
+    p_msg = '\n{}_{}: {}\n'.format(thread_name, time, msg)
+    # if debug:
+    #   print(p_msg)
+    print_queue.put(p_msg)
 
 
 def start_crawl(access_info):
@@ -536,6 +565,14 @@ def start_crawl(access_info):
 
   load_data_struc()
 
+  threads = []
+  for _ in range(MAX_THREADS):
+    t = MultipleCrawls(access_info)
+    threads.append(t)
+
+  printing_thread = PrintingThread(print_queue, saved_pages, log_file)
+  threads.append(printing_thread)
+
   try:
     for snap, urls in home_pages.items():
       u_addr = get_unique_addr(snap, '')
@@ -543,23 +580,15 @@ def start_crawl(access_info):
         seen_pages.add(u_addr)
         url_queue.append((urls[-1], snap, '', MAX_DEPTH_FROM_HOME))
 
-    threads = []
-    for _ in range(MAX_THREADS):
-      t = MultipleCrawls(access_info)
-      threads.append(t)
-
-    printing_thread = PrintingThread(print_queue, log_file)
-    threads.append(printing_thread)
-
     for t in threads:
       t.start()
-
-    for t in threads:
-      t.join()
 
   except Exception as e:
     print(e)
   finally:
+    for t in threads:
+      t.join()
+
     log_file.close()
     save_data_struc()
 
