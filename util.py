@@ -53,17 +53,19 @@ def get_snapshot_number(url):
 def read_pickle(pickle_file):
   with open(pickle_file, "rb") as f:
     loaded = pickle.load(f)
-    print(loaded)
+    # print(loaded)
     print(len(loaded))
 
 
 class PrintingThread(threading.Thread):
-  def __init__(self, queue, file):
+  def __init__(self, queue, saved_pages, file):
     threading.Thread.__init__(self)
     self.queue = queue
+    self.saved_pages = saved_pages
     self.file = file
 
   def run(self):
+    print('number of saved pages: {}'.format(len(self.saved_pages)))
     self.file.write(self.queue.get())
 
 
