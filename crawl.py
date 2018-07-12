@@ -253,7 +253,8 @@ def traverse_page(url, snap, orig_addr, access_info, depth=None):
 
   url, snap, r_addr, page = ret
 
-  is_proper_page, is_article, pub_date = access_info.get_page_info(page, url)
+  soup, is_proper_page, is_article, pub_date = access_info.get_page_info(
+      page, url)
   print_thread(
       'page {} is_proper_page: {}, is_article: {}, pub_date: {}'.format(
           url, is_proper_page, is_article, pub_date))
@@ -268,7 +269,7 @@ def traverse_page(url, snap, orig_addr, access_info, depth=None):
       return
 
     # save article if appropriate
-    # check for publication date
+    # check for publication dateget_page_info
     if pub_date < access_info.start_date or pub_date > access_info.end_date:
       return
 
@@ -293,7 +294,7 @@ def traverse_page(url, snap, orig_addr, access_info, depth=None):
   # add to list: url that are article with depth 0
   #              url that are other with depth depth - 1
 
-  soup = BeautifulSoup(page, 'html5lib')
+  # soup = BeautifulSoup(page, 'html5lib')
 
   all_as = soup.find_all('a', href=True)
 
@@ -351,12 +352,9 @@ class MultipleCrawls(threading.Thread):
     while True:
       seen_page_lock.acquire()
       if url_queue:
-        seen_page_lock.release()
         if self.empty_count == 1:
           empty_threads -= 1
           self.empty_count = 0
-
-        seen_page_lock.acquire()
 
         href, snap, addr, depth = url_queue.popleft()
 
@@ -367,12 +365,13 @@ class MultipleCrawls(threading.Thread):
                                               href))
         traverse_page(href, snap, addr, self.access_info, depth)
       else:
-        seen_page_lock.release()
         if self.empty_count == 0:
           self.empty_count = 1
           empty_threads += 1
           if empty_threads >= MAX_THREADS:
+            seen_page_lock.release()
             break
+          seen_page_lock.release()
 
 
 def save_article(page, pub_date, addr, article_name):
@@ -403,7 +402,7 @@ def nytimes_page_info(page, url):
   is_article = False
   pub_date = None
 
-  soup = BeautifulSoup(page, "html5lib")
+  soup = BeautifulSoup(page, "lxml")
 
   # check for page is proper or not
   # necessary because if page does not exist, wayback will lead to different page even if
@@ -426,7 +425,7 @@ def nytimes_page_info(page, url):
 
   if not is_proper_page:
     print_thread('page {} is not proper'.format(url))
-    return False, False, None
+    return soup, False, False, None
 
   # check whether page is article
   meta_articleid_tag = soup.find('meta', attrs={'name': 'articleid'})
@@ -466,10 +465,10 @@ def nytimes_page_info(page, url):
       print_thread('{} is not article (cannot find pub date)'.format(url))
 
   if is_article:
-    return is_proper_page, is_article, pub_date
+    return soup, is_proper_page, is_article, pub_date
   else:
     print_thread('url {} is not article'.format(url))
-    return is_proper_page, is_article, None
+    return soup, is_proper_page, is_article, None
 
 
 def save_data_struc():
