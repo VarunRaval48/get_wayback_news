@@ -54,6 +54,11 @@ ROBOTSTXT_OBEY = True
 #DOWNLOADER_MIDDLEWARES = {
 #    'scrapy_news.middlewares.ScrapyNewsDownloaderMiddleware': 543,
 #}
+DOWNLOADER_MIDDLEWARES = {
+    'scrapy_wayback_machine.WaybackMachineMiddleware': 5,
+}
+
+WAYBACK_MACHINE_TIME_RANGE = ('20100101', '20100131')
 
 # Enable or disable extensions
 # See https://doc.scrapy.org/en/latest/topics/extensions.html
