@@ -1,6 +1,8 @@
 import pickle
 import threading
 
+from datetime import datetime
+
 
 def get_date_format(y, m, d):
   """
@@ -70,6 +72,14 @@ class PrintingThread(threading.Thread):
   def run(self):
     print('number of saved pages: {}'.format(len(self.saved_pages)))
     self.file.write(self.queue.get())
+
+
+def print_thread(msg, error=False, debug=False):
+  time = datetime.strftime(datetime.now(), "%Y%m%d%H%M%S")
+
+  if error:
+    p_msg = '\nERROR\n{}: {}\n'.format(time, msg)
+    print(p_msg)
 
 
 if __name__ == '__main__':

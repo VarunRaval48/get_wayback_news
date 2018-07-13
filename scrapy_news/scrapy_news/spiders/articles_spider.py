@@ -8,6 +8,10 @@ from .util import get_date_format, get_page_addr, get_snapshot_number
 from .wayback_util import get_home_page_urls, get_unique_addr, is_url_proper
 from .newssite_util import nytimes_page_info, save_article, AccessInfo
 
+from ..items import PageItem
+
+from datetime import datetime
+
 
 class NytimesSpider(scrapy.Spider):
   name = "articles"
@@ -25,26 +29,26 @@ class NytimesSpider(scrapy.Spider):
     self.seen_pages = set()
 
   def start_requests(self):
-    home_pages = get_home_page_urls(self.access_info)
-    for snap, urls in home_pages.items():
-      u_addr = get_unique_addr(snap, '')
-      if u_addr not in self.seen_pages:
-        self.seen_pages.add(u_addr)
-        yield scrapy.Request(url=urls[-1], callback=self.parse)
+    yield scrapy.Request(NytimesSpider.url, callback=self.parse)
 
   def parse(self, response):
-    url = response.request.url
-    r_url = response.url
-    snap = get_snapshot_number(r_url)
-    addr = get_page_addr(r_url, domain_name)
+    # url = response.request.url
+    r_url = response.meta['wayback_machine_url']
+    snap = datetime.strftime(response.meta['wayback_machine_time'], "%Y%m%d")
+    addr = get_page_addr(r_url, self.access_info.domain_name)
 
-    if is_url_proper(url, r_url, self.access_info):
-      if url != r_url:
-        self.seen_pages.add(get_unique_addr(snap, addr))
+    if is_url_proper(r_url, snap, self.access_info):
+      u_addr = get_unique_addr(snap, addr)
+      if u_addr not in self.seen_pages:
+        self.seen_pages.add(u_addr)
+      else:
+        return
 
       page = response.body.decode('utf-8', 'ignore')
-      soup, is_proper_page, pub_date_page, is_article, pub_date = \
+      soup, is_proper_page, pub_date_home, is_article, pub_date = \
         self.access_info.get_page_info(page, r_url)
+
+      print(is_proper_page, pub_date_home, is_article, pub_date)
 
       if not is_proper_page:
         return
@@ -69,18 +73,8 @@ class NytimesSpider(scrapy.Spider):
 
           addr = get_page_addr(href, self.access_info.domain_name)
 
-          snap_new = get_snapshot_number(href)
-          if snap_new is None:
-            continue
-
-          snap_date = int(snap_new[:8])
-
-          # TODO check if second condition will ever happen
-          if snap_date < self.access_info.start_date or snap_date > self.access_info.end_date:
-            continue
-
           if addr is not None:
-            u_addr = get_unique_addr(snap_new[:8], addr)
+            u_addr = get_unique_addr(snap, addr)
 
           # check whether url is in the set using page specific url name
           if addr is None or u_addr in self.seen_pages:

@@ -3,7 +3,7 @@ import json
 from urllib.request import urlopen
 from urllib import error
 
-from .util import get_page_addr, get_snapshot_number, get_date_format
+from .util import get_page_addr, get_snapshot_number, get_date_format, print_thread
 
 
 def traverse_calendar(data, access_info):
@@ -69,33 +69,23 @@ def get_unique_addr(snap, addr):
   return '{}_{}'.format(snap, addr)
 
 
-def is_url_proper(url, r_url, access_info):
-  if url != r_url:
-    # check whether response url is pointing to a valid page
-    # one way is to check for yyyymmddhhmmss/ format in url
-    r_snap = get_snapshot_number(r_url)
+def is_url_proper(r_url, r_snap, access_info):
+  # check whether response url is pointing to a valid page
+  # one way is to check for yyyymmddhhmmss/ format in url
 
-    # url will always have snap because url is added only if it has snap
-    # (look at function traverse_page and when queue is loaded first time)
+  snap = r_snap[:8]
+  snap_date = int(snap)
 
-    if r_snap is None:
-      print_thread('response url is different {}'.format(r_url))
-      print_thread('snap:', snap, 'r_snap', r_snap)
-      return False
+  # check whether redirected url's snapshot is before start date or after
+  # only see if its after start date
+  # TODO see if it has to be after cur snap
+  if snap_date < access_info.start_date:
+    print_thread("response url's snap is out of range {}".format(r_url))
+    return False
 
-    snap = r_snap[:8]
-    snap_date = int(snap)
-
-    # check whether redirected url's snapshot is before start date or after
-    # only see if its after start date
-    # TODO see if it has to be after cur snap
-    if snap_date < access_info.start_date:
-      print_thread("response url's snap is out of range {}".format(r_url))
-      return False
-
-    addr = get_page_addr(r_url, access_info.domain_name)
-    if addr is None:
-      print_thread('response url is invalid: {}'.format(r_url))
-      return False
+  addr = get_page_addr(r_url, access_info.domain_name)
+  if addr is None:
+    print_thread('response url is invalid: {}'.format(r_url))
+    return False
 
   return True

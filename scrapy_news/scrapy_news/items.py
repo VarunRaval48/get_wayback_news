@@ -15,9 +15,9 @@ class ScrapyNewsItem(scrapy.Item):
 
 
 class PageItem(scrapy.Item):
-  url = scrapy.field()
-  snap = scrapy.field()
-  addr = scrapy.field()
-  page = scrapy.field()
-  pub_date = scrapy.field()
-  access_info = scrapy.field()
+  url = scrapy.Field()
+  snap = scrapy.Field()
+  addr = scrapy.Field()
+  page = scrapy.Field()
+  pub_date = scrapy.Field()
+  access_info = scrapy.Field()

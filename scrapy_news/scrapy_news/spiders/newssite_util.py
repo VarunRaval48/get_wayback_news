@@ -2,7 +2,7 @@ from bs4 import BeautifulSoup
 
 from datetime import datetime
 
-from .util import get_date_format
+from .util import get_date_format, print_thread
 
 
 class AccessInfo:
