@@ -7,6 +7,7 @@ import scrapy
 from .util import get_date_format, get_page_addr, get_snapshot_number
 from .wayback_util import get_home_page_urls, get_unique_addr, is_url_proper
 from .newssite_util import nytimes_page_info, save_article, AccessInfo
+from ..items import PageItem
 
 
 class NytimesSpider(scrapy.Spider):
@@ -36,14 +37,14 @@ class NytimesSpider(scrapy.Spider):
     url = response.request.url
     r_url = response.url
     snap = get_snapshot_number(r_url)
-    addr = get_page_addr(r_url, domain_name)
+    addr = get_page_addr(r_url, self.access_info.domain_name)
 
     if is_url_proper(url, r_url, self.access_info):
       if url != r_url:
         self.seen_pages.add(get_unique_addr(snap, addr))
 
       page = response.body.decode('utf-8', 'ignore')
-      soup, is_proper_page, pub_date_page, is_article, pub_date = \
+      soup, is_proper_page, pub_date_home, is_article, pub_date = \
         self.access_info.get_page_info(page, r_url)
 
       if not is_proper_page:

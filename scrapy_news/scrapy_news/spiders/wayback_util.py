@@ -3,7 +3,7 @@ import json
 from urllib.request import urlopen
 from urllib import error
 
-from .util import get_page_addr, get_snapshot_number, get_date_format
+from .util import get_page_addr, get_snapshot_number, get_date_format, print_thread
 
 
 def traverse_calendar(data, access_info):
