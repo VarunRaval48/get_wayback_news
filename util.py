@@ -31,6 +31,9 @@ def get_page_addr(url, domain):
   while (index < len(url) and url[index] != '/'):
     index += 1
 
+  if index >= len(url) - 1:
+    return ''
+
   return url[index + 1:].replace('/', '_')
 
 
