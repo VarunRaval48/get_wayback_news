@@ -16,16 +16,18 @@ import threading
 from bs4 import BeautifulSoup
 
 from util import get_date_format, get_page_addr, get_snapshot_number
-from util import PrintingThread
+from util import PrintingThread, MyDeque, LIFO_QUEUE, FIFO_QUEUE
 
 # depth to search for
-MAX_DEPTH_FROM_HOME = 3
+MAX_DEPTH_FROM_HOME = 2
 
 # maximum number of tries when response code is not 200
 MAX_TRIES = 5
 
 # number of threads to run
 MAX_THREADS = 7
+
+TYPE_QUEUE = LIFO_QUEUE
 
 # path to save the log file
 LOG_FILE = './logs'
@@ -40,7 +42,7 @@ seen_pages = set()
 saved_pages = set()
 
 # format of queue is (url, snapshot (string), page_address, depth)
-url_queue = deque()
+url_queue = MyDeque(type_queue=TYPE_QUEUE)
 
 seen_page_lock = threading.Lock()
 saved_page_lock = threading.Lock()
@@ -329,8 +331,8 @@ def traverse_page(url, snap, orig_addr, access_info, depth=None):
 
 
 def crawl(access_info):
-  while url_queue:
-    href, snap, addr, depth = url_queue.popleft()
+  while url_queue.length() > 0:
+    href, snap, addr, depth = url_queue.pop()
     print('traversing url: {}'.format(href))
     traverse_page(href, snap, addr, access_info, depth)
 
@@ -353,12 +355,12 @@ class MultipleCrawls(threading.Thread):
     while True:
       try:
         seen_page_lock.acquire()
-        if url_queue:
+        if url_queue.length() > 0:
           if self.empty_count == 1:
             empty_threads -= 1
             self.empty_count = 0
 
-          href, snap, addr, depth = url_queue.popleft()
+          href, snap, addr, depth = url_queue.pop()
 
           seen_page_lock.release()
 
@@ -502,7 +504,7 @@ def save_data_struc():
     pickle.dump(seen_pages, f)
 
   with open("url_queue.p", "wb") as f:
-    pickle.dump(url_queue, f)
+    pickle.dump(url_queue.deque, f)
 
   with open("saved_pages.p", "wb") as f:
     pickle.dump(saved_pages, f)
@@ -516,8 +518,8 @@ def load_data_struc():
       print('number of seen pages', len(seen_pages))
 
     with open("url_queue.p", "rb") as f:
-      url_queue = pickle.load(f)
-      print('length of url queue', len(url_queue))
+      url_queue = MyDeque(deq=pickle.load(f))
+      print('length of url queue', url_queue.length())
 
     with open("saved_pages.p", "rb") as f:
       saved_pages = pickle.load(f)
@@ -526,7 +528,7 @@ def load_data_struc():
   except FileNotFoundError:
     print('data structures not yet pickled')
     seen_pages = set()
-    url_queue = deque()
+    url_queue = MyDeque(type_queue=TYPE_QUEUE)
     saved_pages = set()
 
 
@@ -554,8 +556,8 @@ def print_thread(msg, error=False, debug=False):
     print_queue.put(p_msg)
   else:
     p_msg = '\n{}_{}: {}\n'.format(thread_name, time, msg)
-    # if debug:
-    #   print(p_msg)
+    if debug:
+      print(p_msg)
     print_queue.put(p_msg)
 
 
@@ -597,8 +599,8 @@ if __name__ == '__main__':
 
   year, month, day = 2010, 1, 1
   url, domain_name = "http://www.nytimes.com/", "nytimes.com"
-  no_days = 31
-  end_date = 20100131
+  no_days = 1
+  end_date = 20100101
   nytimes_info = AccessInfo(year, month, day, no_days, end_date, url,
                             domain_name, nytimes_page_info, save_article)
 

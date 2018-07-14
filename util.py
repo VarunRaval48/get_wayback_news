@@ -1,5 +1,9 @@
 import pickle
 import threading
+from collections import deque
+
+LIFO_QUEUE = 'LIFO'
+FIFO_QUEUE = 'FIFO'
 
 
 def get_date_format(y, m, d):
@@ -69,8 +73,26 @@ class PrintingThread(threading.Thread):
     self.file.write(self.queue.get())
 
 
+class MyDeque():
+  def __init__(self, type_queue=LIFO_QUEUE, deq=None):
+    if deq is None:
+      self.deque = deque()
+    else:
+      self.deque = deq
+
+    if type_queue == LIFO_QUEUE:
+      self.append = self.deque.appendleft
+      self.pop = self.deque.popleft
+    else:
+      self.append = self.deque.append
+      self.pop = self.deque.popleft
+
+  def length(self):
+    return len(self.deque)
+
+
 if __name__ == '__main__':
   # url = 'https://www.nytimes.com/a/1/2.html'
   # print(get_page_addr(url, 'nytimes.com'))
 
-  read_pickle('url_queue.p')
+  read_pickle('seen_pages.p')
