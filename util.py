@@ -1,9 +1,17 @@
 import pickle
 import threading
+from datetime import datetime
+
+import threading
+
 from collections import deque
+from queue import Queue
+import queue as queue
 
 LIFO_QUEUE = 'LIFO'
 FIFO_QUEUE = 'FIFO'
+
+print_queue = Queue()
 
 
 def get_date_format(y, m, d):
@@ -67,10 +75,18 @@ class PrintingThread(threading.Thread):
     self.queue = queue
     self.saved_pages = saved_pages
     self.file = file
+    self.stop = False
 
   def run(self):
-    print('number of saved pages: {}'.format(len(self.saved_pages)))
-    self.file.write(self.queue.get())
+    while True and not self.stop:
+      print('number of saved pages: {}'.format(len(self.saved_pages)))
+      try:
+        self.file.write(self.queue.get(timeout=10))
+      except queue.Empty:
+        print('Queue empty')
+
+  def stop_thread(self):
+    self.stop = True
 
 
 class MyDeque():
@@ -89,6 +105,24 @@ class MyDeque():
 
   def length(self):
     return len(self.deque)
+
+
+def print_thread(msg, error=False, debug=True):
+  thread_name = threading.current_thread().name
+  # print('{}: {}'.format(thread_name, msg))
+
+  time = datetime.strftime(datetime.now(), "%Y%m%d%H%M%S")
+  # print('number of articles saved: {}'.format(len(saved_pages)))
+
+  if error:
+    p_msg = '\nERROR\n{}_{}: {}\n'.format(thread_name, time, msg)
+    print(p_msg)
+    print_queue.put(p_msg)
+  else:
+    p_msg = '\n{}_{}: {}\n'.format(thread_name, time, msg)
+    if debug:
+      print(p_msg)
+    print_queue.put(p_msg)
 
 
 if __name__ == '__main__':
