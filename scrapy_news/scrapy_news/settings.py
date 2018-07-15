@@ -58,7 +58,7 @@ DOWNLOADER_MIDDLEWARES = {
     'scrapy_wayback_machine.WaybackMachineMiddleware': 5,
 }
 
-WAYBACK_MACHINE_TIME_RANGE = (20100101, 20100110)
+WAYBACK_MACHINE_TIME_RANGE = (20100111, 20100131)
 
 # Enable or disable extensions
 # See https://doc.scrapy.org/en/latest/topics/extensions.html
@@ -86,7 +86,7 @@ AUTOTHROTTLE_START_DELAY = 1
 # each remote server
 AUTOTHROTTLE_TARGET_CONCURRENCY = 10
 # Enable showing throttling stats for every response received:
-AUTOTHROTTLE_DEBUG = True
+AUTOTHROTTLE_DEBUG = False
 
 # Enable and configure HTTP caching (disabled by default)
 # See https://doc.scrapy.org/en/latest/topics/downloader-middleware.html#httpcache-middleware-settings
@@ -98,5 +98,7 @@ AUTOTHROTTLE_DEBUG = True
 
 DOWNLOAD_FAIL_ON_DATALOSS = False
 
-DEPTH_LIMIT = 2
+# LOG_LEVEL = 'INFO'
+
+DEPTH_LIMIT = 3
 DEPTH_PRIORITY = -1
