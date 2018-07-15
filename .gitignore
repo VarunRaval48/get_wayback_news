@@ -2,3 +2,7 @@
 __pycache__/*
 *.pyc
 *.pyo
+scrapy_news/scrapy_news/*.pyc
+scrapy_news/scrapy_news/*.pyo
+scrapy_news/scrapy_news/spiders/*.pyc
+scrapy_news/scrapy_news/spiders/*.pyo
