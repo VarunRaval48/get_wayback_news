@@ -49,7 +49,7 @@ def get_snapshot_number(url):
 
   # get string in place of yyyymmsshhmmss
   snap_num = url[index:index + 14]
-  if snap_num.isdecimal() and url[index + 14] == '/':
+  if snap_num.isdecimal() and index + 14 < len(url) and url[index + 14] == '/':
     return snap_num
   else:
     return None
