@@ -32,7 +32,7 @@ ROBOTSTXT_OBEY = False
 #CONCURRENT_REQUESTS_PER_IP = 16
 
 # Disable cookies (enabled by default)
-#COOKIES_ENABLED = False
+COOKIES_ENABLED = False
 
 # Disable Telnet Console (enabled by default)
 #TELNETCONSOLE_ENABLED = False
@@ -79,9 +79,9 @@ AUTOTHROTTLE_START_DELAY = 1
 # AUTOTHROTTLE_MAX_DELAY = 60
 # The average number of requests Scrapy should be sending in parallel to
 # each remote server
-AUTOTHROTTLE_TARGET_CONCURRENCY = 10
+AUTOTHROTTLE_TARGET_CONCURRENCY = 70
 # Enable showing throttling stats for every response received:
-AUTOTHROTTLE_DEBUG = True
+AUTOTHROTTLE_DEBUG = False
 
 # Enable and configure HTTP caching (disabled by default)
 # See https://doc.scrapy.org/en/latest/topics/downloader-middleware.html#httpcache-middleware-settings
@@ -95,3 +95,5 @@ LOG_LEVEL = 'INFO'
 
 DEPTH_LIMIT = 3
 DEPTH_PRIORITY = -1
+
+REACTOR_THREADPOOL_MAXSIZE = 20
