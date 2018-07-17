@@ -71,6 +71,10 @@ def get_unique_addr(snap, addr):
 
 def is_url_proper(url, r_url, access_info):
   if url != r_url:
+
+    if not access_info.check_url(r_url):
+      return False
+
     # check whether response url is pointing to a valid page
     # one way is to check for yyyymmddhhmmss/ format in url
     r_snap = get_snapshot_number(r_url)

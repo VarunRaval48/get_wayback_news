@@ -6,7 +6,7 @@ import scrapy
 
 from .util import get_date_format, get_page_addr, get_snapshot_number
 from .wayback_util import get_home_page_urls, get_unique_addr, is_url_proper
-from .newssite_util import nytimes_page_info, save_article, AccessInfo
+from .newssite_util import nytimes_page_info, save_article, AccessInfo, nytimes_url
 from ..items import PageItem
 
 
@@ -22,7 +22,7 @@ class NytimesSpider(scrapy.Spider):
     self.access_info = AccessInfo(
         NytimesSpider.year, NytimesSpider.month, NytimesSpider.day,
         NytimesSpider.no_days, NytimesSpider.end_date, NytimesSpider.url,
-        NytimesSpider.domain_name, nytimes_page_info, save_article)
+        NytimesSpider.domain_name, nytimes_page_info, nytimes_url, save_article)
     self.seen_pages = set()
 
   def start_requests(self):
@@ -67,6 +67,9 @@ class NytimesSpider(scrapy.Spider):
 
         for a_tag in all_as:
           href = str(a_tag['href'])
+
+          if not access_info.check_url(href):
+            continue
 
           addr = get_page_addr(href, self.access_info.domain_name)
 
