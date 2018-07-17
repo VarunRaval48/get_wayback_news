@@ -68,7 +68,7 @@ class NytimesSpider(scrapy.Spider):
         for a_tag in all_as:
           href = str(a_tag['href'])
 
-          if not access_info.check_url(href):
+          if not self.access_info.check_url(href):
             continue
 
           addr = get_page_addr(href, self.access_info.domain_name)
