@@ -158,16 +158,17 @@ def nytimes_page_info(page, url):
     id_time = soup.find("div", id="date")
     if id_time is not None:
       p_tag = id_time.find('p')
-      p_contents = p_tag.contents
-      if p_contents:
-        date = p_contents[0]
-        date = date.strip()
-        try:
-          pub_date_home = datetime.strptime(date, "%A, %B %d, %Y")
-          pub_date_home = int(datetime.strftime(pub_date_home, '%Y%m%d'))
-        except ValueError as e:
-          print_thread('error parsing date {}'.format(e), error=True)
-          pub_date_home = None
+      if p_tag:
+        p_contents = p_tag.contents
+        if p_contents:
+          date = p_contents[0]
+          date = date.strip()
+          try:
+            pub_date_home = datetime.strptime(date, "%A, %B %d, %Y")
+            pub_date_home = int(datetime.strftime(pub_date_home, '%Y%m%d'))
+          except ValueError as e:
+            print_thread('error parsing date {}'.format(e), error=True)
+            pub_date_home = None
 
   if is_article:
     return soup, is_proper_page, pub_date_home, is_article, pub_date
