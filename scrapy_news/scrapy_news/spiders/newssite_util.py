@@ -1,3 +1,4 @@
+import re
 from bs4 import BeautifulSoup
 
 from datetime import datetime
@@ -19,7 +20,7 @@ class AccessInfo:
   """
 
   def __init__(self, year, month, day, no_days, end_date, url, domain_name,
-               get_page_info, save_article):
+               get_page_info, check_url, save_article):
     self.year = year
     self.month = month
     self.day = day
@@ -38,6 +39,40 @@ class AccessInfo:
 
     self.get_page_info = get_page_info
     self.save_article = save_article
+
+    self.check_url = check_url
+
+
+def nytimes_url(url):
+  domain = "nytimes.com"
+  accepted_sufs = ["pages/"]
+
+  index = url.find(domain)
+  if index == -1:
+    return False
+
+  while (index < len(url) and url[index] != '/'):
+    index += 1
+
+  if index + 1 >= len(url):
+    return True
+
+  path = url[index + 1:]
+  for s in accepted_sufs:
+    if path[:len(s)] == s:
+      return True
+
+  regexp_pre = ["aponline/"]
+  for s in regexp_pre:
+    if path[:len(s)] == s:
+      path = path[len(s):]
+      break
+
+  regexp = r'\d{4}/\d{1,2}/\d{1,2}/*'
+  if re.match(regexp, path):
+    return True
+  else:
+    return False
 
 
 def nytimes_page_info(page, url):
@@ -120,21 +155,19 @@ def nytimes_page_info(page, url):
 
   # check publish date of home page if it is proper page and not article
   if not is_article:
-    id_time = soup.find("div", id="time")
+    id_time = soup.find("div", id="date")
     if id_time is not None:
-      id_time_contents = id_time.contents
-      if id_time_contents:
-        p_tag = id_time_contents[0]
-        p_contents = p_tag.contents
-        if p_contents:
-          date = p_contents[0]
-          date = date.strip()
-          try:
-            pub_date_home = datetime.strptime(date, "%A, %B %d, %Y")
-            pub_date_home = int(datetime.strftime(pub_date_home, '%Y%m%d'))
-          except ValueError as e:
-            print_thread('error parsing date {}'.format(e), error=True)
-            pub_date_home = None
+      p_tag = id_time.find('p')
+      p_contents = p_tag.contents
+      if p_contents:
+        date = p_contents[0]
+        date = date.strip()
+        try:
+          pub_date_home = datetime.strptime(date, "%A, %B %d, %Y")
+          pub_date_home = int(datetime.strftime(pub_date_home, '%Y%m%d'))
+        except ValueError as e:
+          print_thread('error parsing date {}'.format(e), error=True)
+          pub_date_home = None
 
   if is_article:
     return soup, is_proper_page, pub_date_home, is_article, pub_date
